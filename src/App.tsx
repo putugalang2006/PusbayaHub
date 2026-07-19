@@ -48,52 +48,40 @@ export default function App() {
   const [anggotaList, setAnggotaList] = useState<Anggota[]>([]);
   const [isOnline, setIsOnline] = useState<boolean>(true);
 
-  // Real-time Database synchronization via Server-Sent Events (SSE)
+  // Real-time Database synchronization via highly robust Polling
   useEffect(() => {
-    let eventSource: EventSource | null = null;
-    let reconnectTimeout: any = null;
+    let isMounted = true;
+    let pollInterval: any = null;
 
-    function connectSSE() {
-      if (eventSource) {
-        eventSource.close();
-      }
-
-      eventSource = new EventSource("/api/stream");
-
-      eventSource.onopen = () => {
-        setIsOnline(true);
-      };
-
-      eventSource.onerror = () => {
-        setIsOnline(false);
-        if (eventSource) eventSource.close();
-        
-        // Retry connection every 5 seconds
-        if (reconnectTimeout) clearTimeout(reconnectTimeout);
-        reconnectTimeout = setTimeout(connectSSE, 5000);
-      };
-
-      eventSource.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload && (payload.type === "initial" || payload.type === "update")) {
-            setAnggotaList(payload.data);
-            setIsOnline(true);
-          }
-        } catch (e) {
-          console.error("Error parsing real-time DB payload:", e);
+    const fetchAnggota = async () => {
+      try {
+        const response = await fetch("/api/anggota");
+        if (!response.ok) {
+          throw new Error("Gagal mengambil data");
         }
-      };
-    }
+        const data = await response.json();
+        if (isMounted) {
+          setAnggotaList(data);
+          setIsOnline(true);
+        }
+      } catch (err) {
+        console.error("Gagal melakukan sinkronisasi database:", err);
+        if (isMounted) {
+          setIsOnline(false);
+        }
+      }
+    };
 
-    connectSSE();
+    // Initial fetch
+    fetchAnggota();
+
+    // Poll every 2000ms for continuous real-time feel
+    pollInterval = setInterval(fetchAnggota, 2000);
 
     return () => {
-      if (eventSource) {
-        eventSource.close();
-      }
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
+      isMounted = false;
+      if (pollInterval) {
+        clearInterval(pollInterval);
       }
     };
   }, []);

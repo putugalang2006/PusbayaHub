@@ -16,6 +16,9 @@ if (!fs.existsSync(path.dirname(DATA_FILE))) {
   fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
 }
 
+// Cached members in memory to prevent filesystem-related crashes on read-only environments like Vercel
+let cachedMembers: any[] | null = null;
+
 // Initial seed data
 const INITIAL_ANGGOTA_DATA = [
   {
@@ -52,25 +55,57 @@ const INITIAL_ANGGOTA_DATA = [
   }
 ];
 
+function getWritableFilePath(): string {
+  // If running on Vercel or in serverless contexts, use /tmp as it is the only writable directory
+  if (process.env.VERCEL || process.env.NOW_BUILDER || !fs.existsSync(path.dirname(DATA_FILE))) {
+    return path.join("/tmp", "members.json");
+  }
+  return DATA_FILE;
+}
+
 // Helper to read database
 function readMembers(): any[] {
+  if (cachedMembers !== null) {
+    return cachedMembers;
+  }
+
+  const targetFile = getWritableFilePath();
+  try {
+    if (fs.existsSync(targetFile)) {
+      const content = fs.readFileSync(targetFile, "utf-8");
+      cachedMembers = JSON.parse(content);
+      return cachedMembers!;
+    }
+  } catch (error) {
+    console.warn("Could not read from writable file, trying local file fallback:", error);
+  }
+
   try {
     if (fs.existsSync(DATA_FILE)) {
       const content = fs.readFileSync(DATA_FILE, "utf-8");
-      return JSON.parse(content);
+      cachedMembers = JSON.parse(content);
+      return cachedMembers!;
     }
   } catch (error) {
-    console.error("Error reading members:", error);
+    console.warn("Could not read local file fallback:", error);
   }
-  return INITIAL_ANGGOTA_DATA;
+
+  cachedMembers = [...INITIAL_ANGGOTA_DATA];
+  return cachedMembers;
 }
 
 // Helper to write database
 function writeMembers(members: any[]) {
+  cachedMembers = members;
+  const targetFile = getWritableFilePath();
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(members, null, 2), "utf-8");
+    const dir = path.dirname(targetFile);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(targetFile, JSON.stringify(members, null, 2), "utf-8");
   } catch (error) {
-    console.error("Error writing members:", error);
+    console.warn("Writing to database file failed, keeping updates in-memory:", error);
   }
 }
 
@@ -195,6 +230,12 @@ process.on("SIGTERM", () => {
 });
 
 async function setupAndStart() {
+  // If running in a serverless environment (like Vercel), do not run the listener or mount Vite/static serving.
+  // Vercel handles serving static SPA files and routing API calls natively.
+  if (process.env.VERCEL || process.env.NOW_BUILDER) {
+    return;
+  }
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -215,3 +256,5 @@ async function setupAndStart() {
 }
 
 setupAndStart();
+
+export default app;
