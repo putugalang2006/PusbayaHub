@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default catch-all safety net: Deny all by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper for validating unique document identifiers
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Validation helper for members data schema
+    function isValidAnggota(data) {
+      return data.nama is string 
+        && data.nama.size() > 0 
+        && data.nama.size() <= 200
+        && data.whatsapp is string 
+        && data.whatsapp.size() >= 5 
+        && data.whatsapp.size() <= 25
+        && data.alamatLengkap is string 
+        && data.alamatLengkap.size() > 0 
+        && data.alamatLengkap.size() <= 1000
+        && data.tempekan is string 
+        && data.tempekan.size() > 0 
+        && data.tempekan.size() <= 100;
+    }
+
+    // Strict access control and schema matching for the anggota collection
+    match /anggota/{anggotaId} {
+      allow read: if true;
+      allow create: if isValidId(anggotaId) && isValidAnggota(request.resource.data);
+      allow update: if isValidId(anggotaId) && isValidAnggota(request.resource.data);
+      allow delete: if isValidId(anggotaId);
+    }
+  }
+}

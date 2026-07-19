@@ -15,6 +15,7 @@ import DashboardStats from "./components/DashboardStats";
 import DaftarPengguna from "./components/DaftarPengguna";
 import FormAnggota from "./components/FormAnggota";
 import RekapData from "./components/RekapData";
+import { onSnapshotAnggota, saveAnggota, deleteAnggota } from "./lib/db";
 
 export default function App() {
   // Session State
@@ -44,27 +45,22 @@ export default function App() {
   // Unauthorized Warning Dialog State
   const [unauthorizedError, setUnauthorizedError] = useState<string | null>(null);
 
-  // Anggota List State (Seed with authentic Balinese members on first run)
-  const [anggotaList, setAnggotaList] = useState<Anggota[]>(() => {
-    const stored = localStorage.getItem("pusbaya_net_anggota");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        // Map old structures safely if any exist in the browser cache
-        return parsed.map((item: any) => ({
-          id: item.id || Date.now().toString() + Math.random().toString(),
-          nama: item.nama || "",
-          whatsapp: item.whatsapp || item.nomorWhatsApp || "081234567890",
-          alamatLengkap: item.alamatLengkap || (item.banjar && item.gang ? `Banjar ${item.banjar}, ${item.gang}` : "Jl. Raya Kerobokan, Badung"),
-          tempekan: item.tempekan || "Tempek Kauh Kelod",
-          createdAt: item.createdAt || new Date().toISOString(),
-        }));
-      } catch (e) {
-        return INITIAL_ANGGOTA_DATA;
-      }
-    }
-    return INITIAL_ANGGOTA_DATA;
-  });
+  // Offline State Handler
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  // Anggota List State (Seed with authentic Balinese members, then fetch from database)
+  const [anggotaList, setAnggotaList] = useState<Anggota[]>(INITIAL_ANGGOTA_DATA);
 
   // UI Navigation & Dialog States
   const [activeTab, setActiveTab] = useState<TabName>("dashboard");
@@ -89,10 +85,20 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Save anggotaList to localStorage whenever it changes
+  // Listen to real-time database updates
   useEffect(() => {
-    localStorage.setItem("pusbaya_net_anggota", JSON.stringify(anggotaList));
-  }, [anggotaList]);
+    const unsubscribe = onSnapshotAnggota(
+      (data) => {
+        setAnggotaList(data);
+        setIsOffline(false);
+      },
+      (err) => {
+        console.error("Connection error:", err);
+        setIsOffline(true);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
 
   // Show Toast helper
   const showToastNotification = (title: string, message: string) => {
@@ -120,7 +126,7 @@ export default function App() {
   };
 
   // Add / Edit Action Handler
-  const handleSaveAnggota = (
+  const handleSaveAnggota = async (
     data: Omit<Anggota, "id" | "createdAt"> & { id?: string }
   ) => {
     if (data.id) {
@@ -129,46 +135,24 @@ export default function App() {
         setUnauthorizedError("Anda tidak memiliki izin untuk mengubah data anggota. Tindakan ini hanya diperbolehkan untuk akun Admin.");
         return;
       }
-
-      // Editing existing member
-      setAnggotaList((prev) =>
-        prev.map((item) =>
-          item.id === data.id
-            ? {
-                ...item,
-                nama: data.nama,
-                whatsapp: data.whatsapp,
-                alamatLengkap: data.alamatLengkap,
-                tempekan: data.tempekan,
-              }
-            : item
-        )
-      );
-
-      // Toast notification for successful update
-      showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
-    } else {
-      // Creating new member - both Admin and normal Pengguna can fill out the Registration Form.
-      const newAnggota: Anggota = {
-        id: Date.now().toString(),
-        nama: data.nama,
-        whatsapp: data.whatsapp,
-        alamatLengkap: data.alamatLengkap,
-        tempekan: data.tempekan,
-        createdAt: new Date().toISOString(),
-      };
-      setAnggotaList((prev) => [newAnggota, ...prev]);
-
-      // Toast notification for successful save
-      showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
-
-      // Redirect to Daftar Anggota tab after 1.5 seconds
-      setTimeout(() => {
-        setActiveTab("anggota");
-      }, 1500);
     }
-    setIsFormOpen(false);
-    setEditingAnggota(null);
+
+    try {
+      await saveAnggota(data);
+      showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
+      setIsFormOpen(false);
+      setEditingAnggota(null);
+      if (!data.id) {
+        // Redirect to Daftar Anggota tab after 1.5 seconds
+        setTimeout(() => {
+          setActiveTab("anggota");
+        }, 1500);
+      }
+    } catch (e) {
+      console.error(e);
+      showToastNotification("Gagal", "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.");
+      setIsOffline(true);
+    }
   };
 
   const handleOpenAddForm = () => {
@@ -186,35 +170,38 @@ export default function App() {
     setIsFormOpen(true);
   };
 
-  const handleDeleteAnggota = (id: string) => {
+  const handleDeleteAnggota = async (id: string) => {
     // Security role validation before delete
     if (!canDelete(userSession)) {
       setUnauthorizedError("Anda tidak memiliki izin untuk menghapus data anggota. Tindakan ini hanya diperbolehkan untuk akun Admin.");
       return;
     }
-    setAnggotaList((prev) => prev.filter((item) => item.id !== id));
-    showToastNotification("Berhasil", "Data anggota berhasil dihapus.");
+
+    try {
+      await deleteAnggota(id);
+      showToastNotification("Berhasil", "Data anggota berhasil dihapus.");
+    } catch (e) {
+      console.error(e);
+      showToastNotification("Gagal", "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.");
+      setIsOffline(true);
+    }
   };
 
   // Dashboard Direct Addition Handler
-  const handleAddAnggotaFromDashboard = (data: Omit<Anggota, "id" | "createdAt">) => {
-    const newAnggota: Anggota = {
-      id: Date.now().toString(),
-      nama: data.nama,
-      whatsapp: data.whatsapp,
-      alamatLengkap: data.alamatLengkap,
-      tempekan: data.tempekan,
-      createdAt: new Date().toISOString(),
-    };
-    setAnggotaList((prev) => [newAnggota, ...prev]);
-
-    // Toast notification for successful save
-    showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
-
-    // Redirect to Daftar Anggota tab after 1.5 seconds
-    setTimeout(() => {
-      setActiveTab("anggota");
-    }, 1500);
+  const handleAddAnggotaFromDashboard = async (data: Omit<Anggota, "id" | "createdAt">) => {
+    try {
+      await saveAnggota(data);
+      showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
+      
+      // Redirect to Daftar Anggota tab after 1.5 seconds
+      setTimeout(() => {
+        setActiveTab("anggota");
+      }, 1500);
+    } catch (e) {
+      console.error(e);
+      showToastNotification("Gagal", "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.");
+      setIsOffline(true);
+    }
   };
 
   // Formatted Date Indonesian Style
@@ -276,6 +263,34 @@ export default function App() {
 
         {/* Inner Content Wrap */}
         <div id="content-inner-scroll" className="p-4 md:p-8 flex-1 overflow-y-auto space-y-6">
+          {/* Global Offline Banner */}
+          <AnimatePresence>
+            {isOffline && (
+              <motion.div
+                id="global-offline-banner"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="mb-4 p-4 bg-red-950/80 border border-red-500/30 rounded-2xl flex items-start gap-3.5 shadow-lg relative z-10"
+              >
+                <div className="shrink-0 w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="font-display font-black text-sm text-white flex items-center gap-2">
+                    Koneksi Terputus
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                  </h4>
+                  <p className="text-slate-400 text-xs font-bold mt-1 uppercase tracking-wider">
+                    Tidak dapat terhubung ke server. Periksa koneksi internet Anda.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
               <motion.div
@@ -291,6 +306,7 @@ export default function App() {
                   onNavigateToMembers={() => setActiveTab("anggota")}
                   onAddAnggota={handleAddAnggotaFromDashboard}
                   userSession={userSession}
+                  isOffline={isOffline}
                 />
               </motion.div>
             )}
@@ -309,6 +325,7 @@ export default function App() {
                   onEditClick={handleOpenEditForm}
                   onDelete={handleDeleteAnggota}
                   isAdmin={userSession.role === "admin"}
+                  isOffline={isOffline}
                 />
               </motion.div>
             )}
@@ -364,6 +381,7 @@ export default function App() {
         }}
         onSave={handleSaveAnggota}
         editingAnggota={editingAnggota}
+        isOffline={isOffline}
       />
 
       {/* Modern Toast Notification Overlay */}

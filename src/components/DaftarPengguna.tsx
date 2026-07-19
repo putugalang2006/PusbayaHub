@@ -20,6 +20,7 @@ interface DaftarPenggunaProps {
   onEditClick: (anggota: Anggota) => void;
   onDelete: (id: string) => void;
   isAdmin?: boolean;
+  isOffline?: boolean;
 }
 
 export default function DaftarPengguna({
@@ -28,6 +29,7 @@ export default function DaftarPengguna({
   onEditClick,
   onDelete,
   isAdmin = false,
+  isOffline = false,
 }: DaftarPenggunaProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -165,16 +167,26 @@ export default function DaftarPengguna({
                         <td className="py-4 px-6 text-center">
                           <div className="flex items-center justify-center gap-2">
                             <button
-                              onClick={() => onEditClick(item)}
-                              title="Edit"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-gold-400 hover:bg-gold-500/10 transition-all cursor-pointer border border-transparent hover:border-gold-500/10"
+                              onClick={() => !isOffline && onEditClick(item)}
+                              disabled={isOffline}
+                              title={isOffline ? "Koneksi Offline" : "Edit"}
+                              className={`p-1.5 rounded-lg text-slate-400 border border-transparent transition-all ${
+                                isOffline
+                                  ? "opacity-40 cursor-not-allowed"
+                                  : "hover:text-gold-400 hover:bg-gold-500/10 hover:border-gold-500/10 cursor-pointer"
+                              }`}
                             >
                               <Edit3 className="w-4.5 h-4.5" />
                             </button>
                             <button
-                              onClick={() => handleDeleteConfirm(item.id)}
-                              title="Hapus"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer border border-transparent hover:border-red-500/10"
+                              onClick={() => !isOffline && handleDeleteConfirm(item.id)}
+                              disabled={isOffline}
+                              title={isOffline ? "Koneksi Offline" : "Hapus"}
+                              className={`p-1.5 rounded-lg text-slate-400 border border-transparent transition-all ${
+                                isOffline
+                                  ? "opacity-40 cursor-not-allowed"
+                                  : "hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/10 cursor-pointer"
+                              }`}
                             >
                               <Trash2 className="w-4.5 h-4.5" />
                             </button>
@@ -238,15 +250,25 @@ export default function DaftarPengguna({
                 {isAdmin && (
                   <div className="flex items-center gap-2.5 w-full pt-1">
                     <button
-                      onClick={() => onEditClick(item)}
-                      className="flex-1 flex items-center justify-center gap-1.5 min-h-[44px] py-3 rounded-xl border border-gold-500/10 bg-dark-850 text-gold-400 font-bold text-xs hover:bg-gold-500/10 transition-colors cursor-pointer"
+                      onClick={() => !isOffline && onEditClick(item)}
+                      disabled={isOffline}
+                      className={`flex-1 flex items-center justify-center gap-1.5 min-h-[44px] py-3 rounded-xl border border-gold-500/10 bg-dark-850 font-bold text-xs transition-colors ${
+                        isOffline
+                          ? "opacity-40 cursor-not-allowed text-slate-500"
+                          : "text-gold-400 hover:bg-gold-500/10 cursor-pointer"
+                      }`}
                     >
                       <Edit3 className="w-4 h-4" />
                       ✏ Edit
                     </button>
                     <button
-                      onClick={() => handleDeleteConfirm(item.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 min-h-[44px] py-3 rounded-xl border border-red-500/20 bg-dark-850 text-red-400 font-bold text-xs hover:bg-red-500/10 transition-colors cursor-pointer"
+                      onClick={() => !isOffline && handleDeleteConfirm(item.id)}
+                      disabled={isOffline}
+                      className={`flex-1 flex items-center justify-center gap-1.5 min-h-[44px] py-3 rounded-xl border border-red-500/20 bg-dark-850 font-bold text-xs transition-colors ${
+                        isOffline
+                          ? "opacity-40 cursor-not-allowed text-slate-500"
+                          : "text-red-400 hover:bg-red-500/10 cursor-pointer"
+                      }`}
                     >
                       <Trash2 className="w-4 h-4" />
                       🗑 Hapus

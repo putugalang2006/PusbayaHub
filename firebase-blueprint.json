@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "anggota": {
+      "title": "Anggota",
+      "description": "Data Anggota ST Pusbaya Hub",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the member"
+        },
+        "nama": {
+          "type": "string",
+          "description": "Full name of the member"
+        },
+        "whatsapp": {
+          "type": "string",
+          "description": "WhatsApp contact number"
+        },
+        "alamatLengkap": {
+          "type": "string",
+          "description": "Full home address"
+        },
+        "tempekan": {
+          "type": "string",
+          "description": "Territorial sub-division/Tempek classification"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp of record creation"
+        }
+      },
+      "required": ["nama", "whatsapp", "alamatLengkap", "tempekan"]
+    }
+  },
+  "firestore": {
+    "anggota/{anggotaId}": {
+      "schema": "anggota",
+      "description": "Central database for organization members"
+    }
+  }
+}

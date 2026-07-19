@@ -14,9 +14,10 @@ interface DashboardStatsProps {
   onNavigateToMembers: () => void;
   onAddAnggota?: (data: Omit<Anggota, "id" | "createdAt">) => void;
   userSession?: UserSession | null;
+  isOffline?: boolean;
 }
 
-export default function DashboardStats({ anggotaList, onNavigateToMembers, onAddAnggota, userSession }: DashboardStatsProps) {
+export default function DashboardStats({ anggotaList, onNavigateToMembers, onAddAnggota, userSession, isOffline = false }: DashboardStatsProps) {
   const [nama, setNama] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [alamatLengkap, setAlamatLengkap] = useState("");
@@ -214,6 +215,24 @@ export default function DashboardStats({ anggotaList, onNavigateToMembers, onAdd
 
         {/* Notification Area */}
         <AnimatePresence>
+          {isOffline && (
+            <motion.div
+              initial={{ opacity: 0, height: 0, y: -10 }}
+              animate={{ opacity: 1, height: "auto", y: 0 }}
+              exit={{ opacity: 0, height: 0, y: -10 }}
+              className="mb-6 p-4 rounded-xl flex items-start gap-3 border border-red-500/30 bg-red-950/40 text-red-300 relative z-10 overflow-hidden"
+            >
+              <div className="shrink-0 mt-0.5">
+                <div className="w-5 h-5 rounded-full border border-red-500 flex items-center justify-center text-xs font-black text-red-400 bg-red-950/50">!</div>
+              </div>
+              <div>
+                <h5 className="font-black text-sm text-red-400">
+                  Koneksi Terputus
+                </h5>
+                <p className="text-xs mt-0.5 font-bold leading-relaxed">Tidak dapat terhubung ke server. Periksa koneksi internet Anda.</p>
+              </div>
+            </motion.div>
+          )}
           {notification && (
             <motion.div
               initial={{ opacity: 0, height: 0, y: -10 }}
@@ -258,11 +277,12 @@ export default function DashboardStats({ anggotaList, onNavigateToMembers, onAdd
                     type="text"
                     placeholder="Contoh: I Putu Gede Astawa"
                     value={nama}
+                    disabled={isOffline}
                     onChange={(e) => {
                       setNama(e.target.value);
                       if (notification) setNotification(null);
                     }}
-                    className="w-full px-3.5 py-2.5 min-h-[44px] bg-dark-850/60 border border-gold-500/20 rounded-xl text-white placeholder-slate-500 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all"
+                    className="w-full px-3.5 py-2.5 min-h-[44px] bg-dark-850/60 border border-gold-500/20 rounded-xl text-white placeholder-slate-500 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -277,13 +297,14 @@ export default function DashboardStats({ anggotaList, onNavigateToMembers, onAdd
                     type="tel"
                     placeholder="Contoh: 081234567890"
                     value={whatsapp}
+                    disabled={isOffline}
                     onChange={(e) => {
                       // automatically strip spaces
                       const cleanVal = e.target.value.replace(/\s+/g, "");
                       setWhatsapp(cleanVal);
                       if (notification) setNotification(null);
                     }}
-                    className="w-full px-3.5 py-2.5 min-h-[44px] bg-dark-850/60 border border-gold-500/20 rounded-xl text-white placeholder-slate-500 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all"
+                    className="w-full px-3.5 py-2.5 min-h-[44px] bg-dark-850/60 border border-gold-500/20 rounded-xl text-white placeholder-slate-500 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -300,12 +321,13 @@ export default function DashboardStats({ anggotaList, onNavigateToMembers, onAdd
                   <textarea
                     placeholder="Contoh: Jl. Raya Kerobokan No. 25, Desa Kerobokan, Kecamatan Kuta Utara, Kabupaten Badung."
                     value={alamatLengkap}
+                    disabled={isOffline}
                     onChange={(e) => {
                       setAlamatLengkap(e.target.value);
                       if (notification) setNotification(null);
                     }}
                     rows={3}
-                    className="w-full px-3.5 py-2.5 bg-dark-850/60 border border-gold-500/20 rounded-xl text-white placeholder-slate-500 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all resize-none"
+                    className="w-full px-3.5 py-2.5 bg-dark-850/60 border border-gold-500/20 rounded-xl text-white placeholder-slate-500 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -317,11 +339,12 @@ export default function DashboardStats({ anggotaList, onNavigateToMembers, onAdd
                 </label>
                 <select
                   value={tempekan}
+                  disabled={isOffline}
                   onChange={(e) => {
                     setTempekan(e.target.value as Tempekan);
                     if (notification) setNotification(null);
                   }}
-                  className="w-full px-3.5 min-h-[44px] bg-dark-850/60 border border-gold-500/20 rounded-xl text-white font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all cursor-pointer"
+                  className="w-full px-3.5 min-h-[44px] bg-dark-850/60 border border-gold-500/20 rounded-xl text-white font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <option value="" disabled className="text-slate-500 bg-dark-900">
                     -- Pilih Tempekan --
@@ -347,7 +370,8 @@ export default function DashboardStats({ anggotaList, onNavigateToMembers, onAdd
             </button>
             <button
               type="submit"
-              className="w-full sm:w-auto min-h-[44px] px-5 py-3 sm:py-2.5 bg-gradient-to-r from-gold-600 via-gold-500 to-gold-700 hover:from-gold-500 hover:to-gold-600 text-dark-950 font-black text-xs uppercase tracking-widest rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-gold-500/10 hover:shadow-lg transition-all cursor-pointer"
+              disabled={isOffline}
+              className="w-full sm:w-auto min-h-[44px] px-5 py-3 sm:py-2.5 bg-gradient-to-r from-gold-600 via-gold-500 to-gold-700 hover:from-gold-500 hover:to-gold-600 text-dark-950 font-black text-xs uppercase tracking-widest rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-gold-500/10 hover:shadow-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <UserPlus className="w-4 h-4" />
               Simpan Data

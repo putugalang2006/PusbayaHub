@@ -14,9 +14,10 @@ interface FormAnggotaProps {
   onClose: () => void;
   onSave: (data: Omit<Anggota, "id" | "createdAt"> & { id?: string }) => void;
   editingAnggota: Anggota | null;
+  isOffline?: boolean;
 }
 
-export default function FormAnggota({ isOpen, onClose, onSave, editingAnggota }: FormAnggotaProps) {
+export default function FormAnggota({ isOpen, onClose, onSave, editingAnggota, isOffline = false }: FormAnggotaProps) {
   const [nama, setNama] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [alamatLengkap, setAlamatLengkap] = useState("");
@@ -124,6 +125,21 @@ export default function FormAnggota({ isOpen, onClose, onSave, editingAnggota }:
 
             {/* Content / Body */}
             <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+              {/* Alert Offline Message */}
+              {isOffline && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-4 bg-red-950/40 border-l-4 border-red-500 rounded-r-xl flex items-start gap-3"
+                >
+                  <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                  <div>
+                    <h5 className="font-black text-red-400 text-sm">Koneksi Terputus</h5>
+                    <p className="text-red-300 text-xs mt-0.5 font-bold">Tidak dapat terhubung ke server. Periksa koneksi internet Anda.</p>
+                  </div>
+                </motion.div>
+              )}
+
               {/* Alert Error Message */}
               {errorMessage && (
                 <motion.div
@@ -152,11 +168,12 @@ export default function FormAnggota({ isOpen, onClose, onSave, editingAnggota }:
                     type="text"
                     placeholder="Contoh: I Putu Gede Astawa"
                     value={nama}
+                    disabled={isOffline}
                     onChange={(e) => {
                       setNama(e.target.value);
                       if (errorMessage) setErrorMessage("");
                     }}
-                    className="w-full pl-10 pr-4 min-h-[44px] bg-dark-850 border border-gold-500/20 rounded-xl text-white placeholder-slate-500 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all"
+                    className="w-full pl-10 pr-4 min-h-[44px] bg-dark-850 border border-gold-500/20 rounded-xl text-white placeholder-slate-500 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -174,13 +191,14 @@ export default function FormAnggota({ isOpen, onClose, onSave, editingAnggota }:
                     type="tel"
                     placeholder="Contoh: 081234567890"
                     value={whatsapp}
+                    disabled={isOffline}
                     onChange={(e) => {
                       // automatically strip spaces
                       const cleanVal = e.target.value.replace(/\s+/g, "");
                       setWhatsapp(cleanVal);
                       if (errorMessage) setErrorMessage("");
                     }}
-                    className="w-full pl-10 pr-4 min-h-[44px] bg-dark-850 border border-gold-500/20 rounded-xl text-white placeholder-slate-500 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all"
+                    className="w-full pl-10 pr-4 min-h-[44px] bg-dark-850 border border-gold-500/20 rounded-xl text-white placeholder-slate-500 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -197,12 +215,13 @@ export default function FormAnggota({ isOpen, onClose, onSave, editingAnggota }:
                   <textarea
                     placeholder="Contoh: Jl. Raya Kerobokan No. 25, Desa Kerobokan, Kecamatan Kuta Utara, Kabupaten Badung."
                     value={alamatLengkap}
+                    disabled={isOffline}
                     onChange={(e) => {
                       setAlamatLengkap(e.target.value);
                       if (errorMessage) setErrorMessage("");
                     }}
                     rows={3}
-                    className="w-full pl-10 pr-4 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-white placeholder-slate-500 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all resize-none"
+                    className="w-full pl-10 pr-4 py-2.5 bg-dark-850 border border-gold-500/20 rounded-xl text-white placeholder-slate-500 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -214,11 +233,12 @@ export default function FormAnggota({ isOpen, onClose, onSave, editingAnggota }:
                 </label>
                 <select
                   value={tempekan}
+                  disabled={isOffline}
                   onChange={(e) => {
                     setTempekan(e.target.value as Tempekan);
                     if (errorMessage) setErrorMessage("");
                   }}
-                  className="w-full px-3.5 min-h-[44px] bg-dark-850 border border-gold-500/20 rounded-xl text-white font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all cursor-pointer"
+                  className="w-full px-3.5 min-h-[44px] bg-dark-850 border border-gold-500/20 rounded-xl text-white font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-gold-500/10 focus:border-gold-400 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <option value="" disabled className="text-slate-500 bg-dark-900">
                     -- Pilih Tempekan --
@@ -245,7 +265,8 @@ export default function FormAnggota({ isOpen, onClose, onSave, editingAnggota }:
                 </button>
                 <button
                   type="submit"
-                  className="w-full sm:w-auto min-h-[44px] px-5 py-3 sm:py-2.5 bg-gradient-to-r from-gold-600 via-gold-500 to-gold-700 hover:from-gold-500 hover:to-gold-600 text-dark-950 font-black text-xs uppercase tracking-widest rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-gold-500/10 hover:shadow-lg transition-all cursor-pointer"
+                  disabled={isOffline}
+                  className="w-full sm:w-auto min-h-[44px] px-5 py-3 sm:py-2.5 bg-gradient-to-r from-gold-600 via-gold-500 to-gold-700 hover:from-gold-500 hover:to-gold-600 text-dark-950 font-black text-xs uppercase tracking-widest rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-gold-500/10 hover:shadow-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Save className="w-4 h-4" />
                   Simpan Data
