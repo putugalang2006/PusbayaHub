@@ -1,0 +1,6 @@
+{
+  "name": "PUSBAYA HUB",
+  "description": "Sistem Pendataan Anggota Organisasi PUSBAYA HUB modern dengan tema hitam emas premium, filter pencarian, dan penyimpanan lokal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
