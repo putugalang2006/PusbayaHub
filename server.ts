@@ -99,14 +99,29 @@ async function startServer() {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
 
-    // send initial ping or data
+    // send initial ping
     res.write("data: ping\n\n");
+
+    // Send the latest data immediately upon connection
+    const currentData = getAnggotaData();
+    res.write(`data: ${JSON.stringify(currentData)}\n\n`);
 
     // add client
     clients.push(res);
 
+    // Keep connection alive with periodic pings every 15 seconds
+    const pingInterval = setInterval(() => {
+      try {
+        res.write("data: ping\n\n");
+      } catch (err) {
+        console.warn("Failed to write ping, connection probably closed.", err);
+      }
+    }, 15000);
+
     req.on("close", () => {
+      clearInterval(pingInterval);
       clients = clients.filter((client) => client !== res);
     });
   });

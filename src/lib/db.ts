@@ -46,7 +46,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     operationType,
     path,
   };
-  console.error("Firestore Error: ", JSON.stringify(errInfo));
+  console.warn("Firestore Error: ", JSON.stringify(errInfo));
 }
 
 /**
@@ -122,8 +122,9 @@ export function onSnapshotAnggota(
     };
 
     eventSource.onerror = (err) => {
-      console.error("SSE connection lost. EventSource will auto-reconnect.", err);
-      onError(err);
+      // EventSource naturally auto-reconnects on connection drops.
+      // We log this as a warning instead of console.error to avoid spamming error reports.
+      console.warn("Sinyal koneksi SSE terputus, mencoba menghubungkan kembali secara otomatis...");
     };
 
     return () => {

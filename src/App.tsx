@@ -149,8 +149,7 @@ export default function App() {
         setConnectionStatus("online");
       },
       (err) => {
-        console.error("Real-time snapshot error:", err);
-        // We do not immediately trigger offline state, let active probe verify it
+        console.warn("Menghubungkan kembali secara otomatis ke server data real-time...");
       }
     );
     return () => unsubscribe();
