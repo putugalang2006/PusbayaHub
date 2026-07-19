@@ -24,6 +24,7 @@ interface NavigationProps {
   userName: string;
   userRole?: "admin" | "user";
   onLogout: () => void;
+  connectionStatus?: "connecting" | "online" | "offline";
 }
 
 export default function Navigation({
@@ -32,6 +33,7 @@ export default function Navigation({
   userName,
   userRole = "user",
   onLogout,
+  connectionStatus = "online",
 }: NavigationProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -68,9 +70,31 @@ export default function Navigation({
       <header className="sticky top-0 z-40 bg-dark-950/95 backdrop-blur-md border-b border-gold-500/10 px-4 py-3 flex items-center justify-between md:hidden shadow-lg">
         <div className="flex items-center gap-2.5">
           <AppLogo className="w-9 h-9" />
-          <span className="font-display font-black text-md text-white tracking-tight">
-            PUSBAYA <span className="gold-shimmer-text">HUB</span>
-          </span>
+          <div className="flex flex-col">
+            <span className="font-display font-black text-md text-white tracking-tight leading-none animate-fade-in">
+              PUSBAYA <span className="gold-shimmer-text">HUB</span>
+            </span>
+            <div className="mt-1 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider">
+              {connectionStatus === "connecting" && (
+                <span className="text-yellow-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+                  Hubungkan...
+                </span>
+              )}
+              {connectionStatus === "online" && (
+                <span className="text-emerald-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Online
+                </span>
+              )}
+              {connectionStatus === "offline" && (
+                <span className="text-red-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                  Terputus
+                </span>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

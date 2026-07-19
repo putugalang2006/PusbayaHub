@@ -15,7 +15,9 @@ import DashboardStats from "./components/DashboardStats";
 import DaftarPengguna from "./components/DaftarPengguna";
 import FormAnggota from "./components/FormAnggota";
 import RekapData from "./components/RekapData";
-import { onSnapshotAnggota, saveAnggota, deleteAnggota } from "./lib/db";
+import { onSnapshotAnggota, saveAnggota, deleteAnggota, checkDatabaseConnection } from "./lib/db";
+import { db, isFirebaseConfigured } from "./firebase";
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
 
 export default function App() {
   // Session State
@@ -45,17 +47,70 @@ export default function App() {
   // Unauthorized Warning Dialog State
   const [unauthorizedError, setUnauthorizedError] = useState<string | null>(null);
 
-  // Offline State Handler
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  // Connection and Loading State Handler
+  const [connectionStatus, setConnectionStatus] = useState<"connecting" | "online" | "offline">("connecting");
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const isOffline = connectionStatus === "offline";
 
+  // Active Connection Probe with Auto-Retry and Sync recovery
   useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
+    let failedAttempts = 0;
+    let isActive = true;
+
+    const fetchLatestData = async () => {
+      try {
+        if (isFirebaseConfigured && db) {
+          const q = query(collection(db, "anggota"), orderBy("createdAt", "desc"));
+          const snapshot = await getDocs(q);
+          const list: Anggota[] = [];
+          snapshot.forEach((d) => {
+            list.push({ id: d.id, ...d.data() } as Anggota);
+          });
+          if (list.length > 0) {
+            setAnggotaList(list);
+          }
+        } else {
+          const res = await fetch("/api/anggota");
+          if (res.ok) {
+            const data = await res.json();
+            if (data) {
+              setAnggotaList(data);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch during recovery:", err);
+      }
+    };
+
+    const probeConnection = async () => {
+      const isOk = await checkDatabaseConnection();
+      if (!isActive) return;
+
+      if (isOk) {
+        failedAttempts = 0;
+        setConnectionStatus((prev) => {
+          if (prev === "offline") {
+            console.log("Database connection recovered! Re-syncing data...");
+            fetchLatestData();
+          }
+          return "online";
+        });
+      } else {
+        failedAttempts += 1;
+        // Don't show offline banner until multiple attempts fail
+        if (failedAttempts >= 2) {
+          setConnectionStatus("offline");
+        }
+      }
+    };
+
+    probeConnection();
+    const interval = setInterval(probeConnection, 5000);
+
     return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
+      isActive = false;
+      clearInterval(interval);
     };
   }, []);
 
@@ -90,11 +145,12 @@ export default function App() {
     const unsubscribe = onSnapshotAnggota(
       (data) => {
         setAnggotaList(data);
-        setIsOffline(false);
+        setIsLoadingData(false);
+        setConnectionStatus("online");
       },
       (err) => {
-        console.error("Connection error:", err);
-        setIsOffline(true);
+        console.error("Real-time snapshot error:", err);
+        // We do not immediately trigger offline state, let active probe verify it
       }
     );
     return () => unsubscribe();
@@ -151,7 +207,7 @@ export default function App() {
     } catch (e) {
       console.error(e);
       showToastNotification("Gagal", "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.");
-      setIsOffline(true);
+      setConnectionStatus("offline");
     }
   };
 
@@ -183,7 +239,7 @@ export default function App() {
     } catch (e) {
       console.error(e);
       showToastNotification("Gagal", "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.");
-      setIsOffline(true);
+      setConnectionStatus("offline");
     }
   };
 
@@ -200,7 +256,7 @@ export default function App() {
     } catch (e) {
       console.error(e);
       showToastNotification("Gagal", "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.");
-      setIsOffline(true);
+      setConnectionStatus("offline");
     }
   };
 
@@ -228,6 +284,7 @@ export default function App() {
         userName={userSession.nama}
         userRole={userSession.role}
         onLogout={handleLogout}
+        connectionStatus={connectionStatus}
       />
 
       {/* Main Content Area */}
@@ -247,16 +304,40 @@ export default function App() {
             </p>
           </div>
 
-          {/* Clock Widget */}
-          <div id="header-clock-widget" className="flex items-center gap-3 bg-dark-900 border border-gold-500/10 px-4 py-2 rounded-xl text-slate-300 shadow-md">
-            <Clock className="w-4 h-4 text-gold-400 animate-pulse" />
-            <div className="text-right">
-              <span id="clock-date" className="text-xs font-bold text-white block leading-none">
-                {formatIndonesianDate(currentTime)}
-              </span>
-              <span id="clock-time" className="text-[10px] font-bold text-gold-400 block mt-0.5 tracking-widest font-mono">
-                {currentTime.toLocaleTimeString("id-ID")} WITA
-              </span>
+          <div className="flex items-center gap-4">
+            {/* Elegant Connection Status Badge */}
+            <div id="desktop-connection-badge" className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-dark-900 border border-gold-500/10 text-xs font-bold">
+              {connectionStatus === "connecting" && (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse shrink-0" />
+                  <span className="text-yellow-400 font-medium">Menghubungkan ke server...</span>
+                </>
+              )}
+              {connectionStatus === "online" && (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="text-emerald-400 font-medium">🟢 Online - Terhubung ke server</span>
+                </>
+              )}
+              {connectionStatus === "offline" && (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 animate-ping" />
+                  <span className="text-red-400 font-medium">🔴 Koneksi Terputus</span>
+                </>
+              )}
+            </div>
+
+            {/* Clock Widget */}
+            <div id="header-clock-widget" className="flex items-center gap-3 bg-dark-900 border border-gold-500/10 px-4 py-2 rounded-xl text-slate-300 shadow-md">
+              <Clock className="w-4 h-4 text-gold-400 animate-pulse" />
+              <div className="text-right">
+                <span id="clock-date" className="text-xs font-bold text-white block leading-none">
+                  {formatIndonesianDate(currentTime)}
+                </span>
+                <span id="clock-time" className="text-[10px] font-bold text-gold-400 block mt-0.5 tracking-widest font-mono">
+                  {currentTime.toLocaleTimeString("id-ID")} WITA
+                </span>
+              </div>
             </div>
           </div>
         </header>
@@ -290,6 +371,31 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {isLoadingData ? (
+            <div id="loading-state-container" className="flex flex-col items-center justify-center py-20 space-y-6">
+              {/* Spinner */}
+              <div className="relative w-16 h-16">
+                <div className="absolute inset-0 rounded-full border-4 border-gold-500/10" />
+                <div className="absolute inset-0 rounded-full border-4 border-t-gold-400 animate-spin" />
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="font-display font-black text-lg text-white">Menghubungkan ke server...</h3>
+                <p className="text-slate-400 text-sm max-w-sm">Mohon tunggu sebentar, sistem sedang sinkronisasi data secara real-time.</p>
+              </div>
+
+              {/* Skeleton cards */}
+              <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="bg-dark-900 border border-gold-500/10 p-6 rounded-2xl space-y-4 animate-pulse">
+                    <div className="h-4 bg-slate-800 rounded w-1/3" />
+                    <div className="h-8 bg-slate-800 rounded w-1/2" />
+                    <div className="h-3 bg-slate-800 rounded w-3/4" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
 
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
@@ -359,6 +465,7 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
+          )}
         </div>
 
         {/* Footer */}

@@ -10,7 +10,9 @@ import {
   orderBy, 
   doc, 
   setDoc, 
-  deleteDoc 
+  deleteDoc,
+  getDocs,
+  limit
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "../firebase";
 import { Anggota } from "../types";
@@ -45,6 +47,37 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     path,
   };
   console.error("Firestore Error: ", JSON.stringify(errInfo));
+}
+
+/**
+ * Perform a real connection check to the database.
+ * Returns true if connection succeeds, false otherwise.
+ */
+export async function checkDatabaseConnection(): Promise<boolean> {
+  if (isFirebaseConfigured && db) {
+    try {
+      const q = query(collection(db, "anggota"), limit(1));
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout")), 4000)
+      );
+      await Promise.race([getDocs(q), timeoutPromise]);
+      return true;
+    } catch (error) {
+      console.warn("Firestore connection check failed:", error);
+      return false;
+    }
+  } else {
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch("/api/anggota", { signal: controller.signal });
+      clearTimeout(id);
+      return res.ok;
+    } catch (error) {
+      console.warn("Express API connection check failed:", error);
+      return false;
+    }
+  }
 }
 
 /**
