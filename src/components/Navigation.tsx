@@ -24,7 +24,6 @@ interface NavigationProps {
   userName: string;
   userRole?: "admin" | "user";
   onLogout: () => void;
-  isOnline?: boolean;
 }
 
 export default function Navigation({
@@ -33,7 +32,6 @@ export default function Navigation({
   userName,
   userRole = "user",
   onLogout,
-  isOnline = true,
 }: NavigationProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -70,15 +68,9 @@ export default function Navigation({
       <header className="sticky top-0 z-40 bg-dark-950/95 backdrop-blur-md border-b border-gold-500/10 px-4 py-3 flex items-center justify-between md:hidden shadow-lg">
         <div className="flex items-center gap-2.5">
           <AppLogo className="w-9 h-9" />
-          <div className="flex flex-col">
-            <span className="font-display font-black text-md text-white tracking-tight">
-              PUSBAYA <span className="gold-shimmer-text">HUB</span>
-            </span>
-            <div className="flex items-center gap-1 mt-0.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-emerald-500 animate-pulse" : "bg-rose-500 animate-pulse"}`}></span>
-              <span className={`text-[8px] font-bold ${isOnline ? "text-emerald-400" : "text-rose-400"}`}>{isOnline ? "Online" : "Offline"}</span>
-            </div>
-          </div>
+          <span className="font-display font-black text-md text-white tracking-tight">
+            PUSBAYA <span className="gold-shimmer-text">HUB</span>
+          </span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -287,15 +279,8 @@ export default function Navigation({
           </nav>
         </div>
 
-        {/* Bottom Area with Logout and Connection State */}
-        <div className="p-6 border-t border-gold-500/10 bg-dark-900/20 space-y-4">
-          <div className="flex items-center justify-between px-3.5 py-2 bg-dark-900/80 rounded-xl border border-gold-500/5">
-            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Status Koneksi</span>
-            <div className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-emerald-500 animate-pulse" : "bg-rose-500 animate-pulse"}`}></span>
-              <span className={`text-[11px] font-bold ${isOnline ? "text-emerald-400" : "text-rose-400"}`}>{isOnline ? "🟢 Online" : "🔴 Offline"}</span>
-            </div>
-          </div>
+        {/* Bottom Area with Logout */}
+        <div className="p-6 border-t border-gold-500/10 bg-dark-900/20">
           <button
             onClick={onLogout}
             className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 font-bold text-sm rounded-xl transition-all cursor-pointer border border-transparent hover:border-red-500/20"

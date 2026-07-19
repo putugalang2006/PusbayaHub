@@ -14,10 +14,9 @@ interface DashboardStatsProps {
   onNavigateToMembers: () => void;
   onAddAnggota?: (data: Omit<Anggota, "id" | "createdAt">) => void;
   userSession?: UserSession | null;
-  isOnline?: boolean;
 }
 
-export default function DashboardStats({ anggotaList, onNavigateToMembers, onAddAnggota, userSession, isOnline = true }: DashboardStatsProps) {
+export default function DashboardStats({ anggotaList, onNavigateToMembers, onAddAnggota, userSession }: DashboardStatsProps) {
   const [nama, setNama] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [alamatLengkap, setAlamatLengkap] = useState("");
@@ -50,14 +49,6 @@ export default function DashboardStats({ anggotaList, onNavigateToMembers, onAdd
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!isOnline) {
-      setNotification({
-        message: "Tidak dapat terhubung ke server. Silakan periksa koneksi internet Anda.",
-        type: "error",
-      });
-      return;
-    }
 
     // Validasi seluruh field
     if (!nama.trim() || !whatsapp.trim() || !alamatLengkap.trim() || !tempekan) {
@@ -356,12 +347,7 @@ export default function DashboardStats({ anggotaList, onNavigateToMembers, onAdd
             </button>
             <button
               type="submit"
-              disabled={!isOnline}
-              className={`w-full sm:w-auto min-h-[44px] px-5 py-3 sm:py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer font-black text-xs uppercase tracking-widest ${
-                !isOnline
-                  ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-50"
-                  : "bg-gradient-to-r from-gold-600 via-gold-500 to-gold-700 hover:from-gold-500 hover:to-gold-600 text-dark-950 shadow-md shadow-gold-500/10 hover:shadow-lg"
-              }`}
+              className="w-full sm:w-auto min-h-[44px] px-5 py-3 sm:py-2.5 bg-gradient-to-r from-gold-600 via-gold-500 to-gold-700 hover:from-gold-500 hover:to-gold-600 text-dark-950 font-black text-xs uppercase tracking-widest rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-gold-500/10 hover:shadow-lg transition-all cursor-pointer"
             >
               <UserPlus className="w-4 h-4" />
               Simpan Data
