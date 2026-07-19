@@ -14,9 +14,10 @@ interface FormAnggotaProps {
   onClose: () => void;
   onSave: (data: Omit<Anggota, "id" | "createdAt"> & { id?: string }) => void;
   editingAnggota: Anggota | null;
+  isOnline?: boolean;
 }
 
-export default function FormAnggota({ isOpen, onClose, onSave, editingAnggota }: FormAnggotaProps) {
+export default function FormAnggota({ isOpen, onClose, onSave, editingAnggota, isOnline = true }: FormAnggotaProps) {
   const [nama, setNama] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [alamatLengkap, setAlamatLengkap] = useState("");
@@ -245,7 +246,12 @@ export default function FormAnggota({ isOpen, onClose, onSave, editingAnggota }:
                 </button>
                 <button
                   type="submit"
-                  className="w-full sm:w-auto min-h-[44px] px-5 py-3 sm:py-2.5 bg-gradient-to-r from-gold-600 via-gold-500 to-gold-700 hover:from-gold-500 hover:to-gold-600 text-dark-950 font-black text-xs uppercase tracking-widest rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-gold-500/10 hover:shadow-lg transition-all cursor-pointer"
+                  disabled={!isOnline}
+                  className={`w-full sm:w-auto min-h-[44px] px-5 py-3 sm:py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer font-black text-xs uppercase tracking-widest ${
+                    !isOnline
+                      ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-50"
+                      : "bg-gradient-to-r from-gold-600 via-gold-500 to-gold-700 hover:from-gold-500 hover:to-gold-600 text-dark-950 shadow-md shadow-gold-500/10 hover:shadow-lg"
+                  }`}
                 >
                   <Save className="w-4 h-4" />
                   Simpan Data

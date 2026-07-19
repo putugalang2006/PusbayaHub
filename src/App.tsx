@@ -44,27 +44,59 @@ export default function App() {
   // Unauthorized Warning Dialog State
   const [unauthorizedError, setUnauthorizedError] = useState<string | null>(null);
 
-  // Anggota List State (Seed with authentic Balinese members on first run)
-  const [anggotaList, setAnggotaList] = useState<Anggota[]>(() => {
-    const stored = localStorage.getItem("pusbaya_net_anggota");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        // Map old structures safely if any exist in the browser cache
-        return parsed.map((item: any) => ({
-          id: item.id || Date.now().toString() + Math.random().toString(),
-          nama: item.nama || "",
-          whatsapp: item.whatsapp || item.nomorWhatsApp || "081234567890",
-          alamatLengkap: item.alamatLengkap || (item.banjar && item.gang ? `Banjar ${item.banjar}, ${item.gang}` : "Jl. Raya Kerobokan, Badung"),
-          tempekan: item.tempekan || "Tempek Kauh Kelod",
-          createdAt: item.createdAt || new Date().toISOString(),
-        }));
-      } catch (e) {
-        return INITIAL_ANGGOTA_DATA;
+  // Anggota List State (Synchronized with centralized real-time database)
+  const [anggotaList, setAnggotaList] = useState<Anggota[]>([]);
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+
+  // Real-time Database synchronization via Server-Sent Events (SSE)
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: any = null;
+
+    function connectSSE() {
+      if (eventSource) {
+        eventSource.close();
       }
+
+      eventSource = new EventSource("/api/stream");
+
+      eventSource.onopen = () => {
+        setIsOnline(true);
+      };
+
+      eventSource.onerror = () => {
+        setIsOnline(false);
+        if (eventSource) eventSource.close();
+        
+        // Retry connection every 5 seconds
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(connectSSE, 5000);
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload && (payload.type === "initial" || payload.type === "update")) {
+            setAnggotaList(payload.data);
+            setIsOnline(true);
+          }
+        } catch (e) {
+          console.error("Error parsing real-time DB payload:", e);
+        }
+      };
     }
-    return INITIAL_ANGGOTA_DATA;
-  });
+
+    connectSSE();
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+    };
+  }, []);
 
   // UI Navigation & Dialog States
   const [activeTab, setActiveTab] = useState<TabName>("dashboard");
@@ -88,11 +120,6 @@ export default function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
-
-  // Save anggotaList to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem("pusbaya_net_anggota", JSON.stringify(anggotaList));
-  }, [anggotaList]);
 
   // Show Toast helper
   const showToastNotification = (title: string, message: string) => {
@@ -119,64 +146,69 @@ export default function App() {
     setActiveTab("dashboard");
   };
 
-  // Add / Edit Action Handler
-  const handleSaveAnggota = (
+  // Add / Edit Action Handler (Centralized database fetch)
+  const handleSaveAnggota = async (
     data: Omit<Anggota, "id" | "createdAt"> & { id?: string }
   ) => {
+    if (!isOnline) {
+      showToastNotification("Gagal", "Tidak dapat terhubung ke server. Silakan periksa koneksi internet Anda.");
+      return;
+    }
+
     if (data.id) {
       // Security role validation before edit
       if (!canEdit(userSession)) {
         setUnauthorizedError("Anda tidak memiliki izin untuk mengubah data anggota. Tindakan ini hanya diperbolehkan untuk akun Admin.");
         return;
       }
-
-      // Editing existing member
-      setAnggotaList((prev) =>
-        prev.map((item) =>
-          item.id === data.id
-            ? {
-                ...item,
-                nama: data.nama,
-                whatsapp: data.whatsapp,
-                alamatLengkap: data.alamatLengkap,
-                tempekan: data.tempekan,
-              }
-            : item
-        )
-      );
-
-      // Toast notification for successful update
-      showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
-    } else {
-      // Creating new member - both Admin and normal Pengguna can fill out the Registration Form.
-      const newAnggota: Anggota = {
-        id: Date.now().toString(),
-        nama: data.nama,
-        whatsapp: data.whatsapp,
-        alamatLengkap: data.alamatLengkap,
-        tempekan: data.tempekan,
-        createdAt: new Date().toISOString(),
-      };
-      setAnggotaList((prev) => [newAnggota, ...prev]);
-
-      // Toast notification for successful save
-      showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
-
-      // Redirect to Daftar Anggota tab after 1.5 seconds
-      setTimeout(() => {
-        setActiveTab("anggota");
-      }, 1500);
     }
-    setIsFormOpen(false);
-    setEditingAnggota(null);
+
+    try {
+      const response = await fetch("/api/anggota", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...data,
+          userRole: userSession?.role,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Gagal menyimpan data");
+      }
+
+      showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
+      setIsFormOpen(false);
+      setEditingAnggota(null);
+
+      // If adding new, navigate to the list
+      if (!data.id) {
+        setTimeout(() => {
+          setActiveTab("anggota");
+        }, 1500);
+      }
+    } catch (err: any) {
+      showToastNotification("Kesalahan", err.message || "Gagal menyimpan data.");
+    }
   };
 
   const handleOpenAddForm = () => {
+    if (!isOnline) {
+      showToastNotification("Gagal", "Tidak dapat terhubung ke server. Silakan periksa koneksi internet Anda.");
+      return;
+    }
     setEditingAnggota(null);
     setIsFormOpen(true);
   };
 
   const handleOpenEditForm = (anggota: Anggota) => {
+    if (!isOnline) {
+      showToastNotification("Gagal", "Tidak dapat terhubung ke server. Silakan periksa koneksi internet Anda.");
+      return;
+    }
     // Check permission to open edit form
     if (!canEdit(userSession)) {
       setUnauthorizedError("Anda tidak memiliki izin untuk mengubah data anggota. Tindakan ini hanya diperbolehkan untuk akun Admin.");
@@ -186,35 +218,71 @@ export default function App() {
     setIsFormOpen(true);
   };
 
-  const handleDeleteAnggota = (id: string) => {
+  const handleDeleteAnggota = async (id: string) => {
+    if (!isOnline) {
+      showToastNotification("Gagal", "Tidak dapat terhubung ke server. Silakan periksa koneksi internet Anda.");
+      return;
+    }
+
     // Security role validation before delete
     if (!canDelete(userSession)) {
       setUnauthorizedError("Anda tidak memiliki izin untuk menghapus data anggota. Tindakan ini hanya diperbolehkan untuk akun Admin.");
       return;
     }
-    setAnggotaList((prev) => prev.filter((item) => item.id !== id));
-    showToastNotification("Berhasil", "Data anggota berhasil dihapus.");
+
+    try {
+      const response = await fetch(`/api/anggota/${id}`, {
+        method: "DELETE",
+        headers: {
+          "x-user-role": userSession?.role || "",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Gagal menghapus data");
+      }
+
+      showToastNotification("Berhasil", "Data anggota berhasil dihapus.");
+    } catch (err: any) {
+      showToastNotification("Kesalahan", err.message || "Gagal menghapus data.");
+    }
   };
 
   // Dashboard Direct Addition Handler
-  const handleAddAnggotaFromDashboard = (data: Omit<Anggota, "id" | "createdAt">) => {
-    const newAnggota: Anggota = {
-      id: Date.now().toString(),
-      nama: data.nama,
-      whatsapp: data.whatsapp,
-      alamatLengkap: data.alamatLengkap,
-      tempekan: data.tempekan,
-      createdAt: new Date().toISOString(),
-    };
-    setAnggotaList((prev) => [newAnggota, ...prev]);
+  const handleAddAnggotaFromDashboard = async (data: Omit<Anggota, "id" | "createdAt">) => {
+    if (!isOnline) {
+      showToastNotification("Gagal", "Tidak dapat terhubung ke server. Silakan periksa koneksi internet Anda.");
+      return;
+    }
 
-    // Toast notification for successful save
-    showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
+    try {
+      const response = await fetch("/api/anggota", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...data,
+          userRole: userSession?.role,
+        }),
+      });
 
-    // Redirect to Daftar Anggota tab after 1.5 seconds
-    setTimeout(() => {
-      setActiveTab("anggota");
-    }, 1500);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Gagal menyimpan data");
+      }
+
+      // Toast notification for successful save
+      showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
+
+      // Redirect to Daftar Anggota tab after 1.5 seconds
+      setTimeout(() => {
+        setActiveTab("anggota");
+      }, 1500);
+    } catch (err: any) {
+      showToastNotification("Kesalahan", err.message || "Gagal mendaftarkan anggota.");
+    }
   };
 
   // Formatted Date Indonesian Style
@@ -241,6 +309,7 @@ export default function App() {
         userName={userSession.nama}
         userRole={userSession.role}
         onLogout={handleLogout}
+        isOnline={isOnline}
       />
 
       {/* Main Content Area */}
@@ -276,6 +345,16 @@ export default function App() {
 
         {/* Inner Content Wrap */}
         <div id="content-inner-scroll" className="p-4 md:p-8 flex-1 overflow-y-auto space-y-6">
+          {/* Offline Banner Notification */}
+          {!isOnline && (
+            <div className="bg-red-500/10 border border-red-500/25 px-6 py-4 rounded-xl flex items-center gap-3 text-red-200 text-sm font-semibold max-w-4xl mx-auto shadow-md shadow-red-950/10 animate-pulse">
+              <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 border border-red-500/45">
+                <span className="w-2 h-2 rounded-full bg-red-500" />
+              </div>
+              <span>Tidak dapat terhubung ke server. Silakan periksa koneksi internet Anda.</span>
+            </div>
+          )}
+
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
               <motion.div
@@ -291,6 +370,7 @@ export default function App() {
                   onNavigateToMembers={() => setActiveTab("anggota")}
                   onAddAnggota={handleAddAnggotaFromDashboard}
                   userSession={userSession}
+                  isOnline={isOnline}
                 />
               </motion.div>
             )}
@@ -364,6 +444,7 @@ export default function App() {
         }}
         onSave={handleSaveAnggota}
         editingAnggota={editingAnggota}
+        isOnline={isOnline}
       />
 
       {/* Modern Toast Notification Overlay */}
