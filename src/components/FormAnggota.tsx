@@ -125,21 +125,6 @@ export default function FormAnggota({ isOpen, onClose, onSave, editingAnggota, i
 
             {/* Content / Body */}
             <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
-              {/* Alert Offline Message */}
-              {isOffline && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-4 bg-red-950/40 border-l-4 border-red-500 rounded-r-xl flex items-start gap-3"
-                >
-                  <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h5 className="font-black text-red-400 text-sm">Koneksi Terputus</h5>
-                    <p className="text-red-300 text-xs mt-0.5 font-bold">Tidak dapat terhubung ke server. Periksa koneksi internet Anda.</p>
-                  </div>
-                </motion.div>
-              )}
-
               {/* Alert Error Message */}
               {errorMessage && (
                 <motion.div

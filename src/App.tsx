@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Clock, Heart } from "lucide-react";
 import { Anggota, UserSession, Role } from "./types";
@@ -50,6 +50,7 @@ export default function App() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const isOffline = connectionStatus === "offline";
+  const hasInitiallyLoaded = useRef(false);
 
   // Manual Refresh Handler
   const handleRefreshData = async () => {
@@ -60,12 +61,13 @@ export default function App() {
         setAnggotaList(data);
         showToastNotification("Berhasil", "Data anggota berhasil disinkronkan dari Supabase.");
         setConnectionStatus("online");
+        hasInitiallyLoaded.current = true;
       } else {
         throw new Error("No data returned");
       }
     } catch (e) {
       console.warn("Refresh failed", e);
-      showToastNotification("Gagal", "Tidak dapat terhubung ke database. Silakan coba beberapa saat lagi.");
+      showToastNotification("Gagal", "Tidak dapat mengambil data. Periksa koneksi internet Anda.", 3000, "error");
       setConnectionStatus("offline");
     } finally {
       setIsRefreshing(false);
@@ -103,9 +105,19 @@ export default function App() {
         });
       } else {
         failedAttempts += 1;
-        // Don't show offline banner until multiple attempts fail
+        // Set offline status if failed multiple times
         if (failedAttempts >= 2) {
-          setConnectionStatus("offline");
+          setConnectionStatus((prev) => {
+            if (prev === "online" && hasInitiallyLoaded.current) {
+              showToastNotification(
+                "Gagal",
+                "Tidak dapat mengambil data. Periksa koneksi internet Anda.",
+                3000,
+                "error"
+              );
+            }
+            return "offline";
+          });
         }
       }
     };
@@ -135,7 +147,31 @@ export default function App() {
     isOpen: boolean;
     title: string;
     message: string;
+    type?: "success" | "error";
   } | null>(null);
+
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Show Toast helper with clear previous timeout support
+  const showToastNotification = (
+    title: string,
+    message: string,
+    duration: number = 2000,
+    type: "success" | "error" = "success"
+  ) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setToast({
+      isOpen: true,
+      title,
+      message,
+      type,
+    });
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+    }, duration);
+  };
 
   // Update clock
   useEffect(() => {
@@ -152,25 +188,22 @@ export default function App() {
         setAnggotaList(data);
         setIsLoadingData(false);
         setConnectionStatus("online");
+        hasInitiallyLoaded.current = true;
       },
       (err) => {
+        setIsLoadingData(false);
+        setConnectionStatus("offline");
+        showToastNotification(
+          "Gagal",
+          "Tidak dapat mengambil data. Periksa koneksi internet Anda.",
+          3000,
+          "error"
+        );
         console.warn("Menghubungkan kembali secara otomatis ke server data real-time...");
       }
     );
     return () => unsubscribe();
   }, []);
-
-  // Show Toast helper
-  const showToastNotification = (title: string, message: string) => {
-    setToast({
-      isOpen: true,
-      title,
-      message,
-    });
-    setTimeout(() => {
-      setToast(null);
-    }, 2000);
-  };
 
   // Handle Login
   const handleLogin = (nama: string, role: Role) => {
@@ -212,7 +245,7 @@ export default function App() {
       }, 1500);
     } catch (e: any) {
       console.error(e);
-      showToastNotification("Gagal", e.message || "Gagal menyimpan data.");
+      showToastNotification("Gagal", e.message || "Gagal menyimpan data.", 3000, "error");
       setConnectionStatus("offline");
     }
   };
@@ -244,7 +277,7 @@ export default function App() {
       showToastNotification("Berhasil", "Data anggota berhasil dihapus.");
     } catch (e) {
       console.error(e);
-      showToastNotification("Gagal", "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.");
+      showToastNotification("Gagal", "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.", 3000, "error");
       setConnectionStatus("offline");
     }
   };
@@ -264,7 +297,7 @@ export default function App() {
       }, 1500);
     } catch (e: any) {
       console.error(e);
-      showToastNotification("Gagal", e.message || "Gagal menyimpan data.");
+      showToastNotification("Gagal", e.message || "Gagal menyimpan data.", 3000, "error");
       setConnectionStatus("offline");
     }
   };
@@ -375,56 +408,10 @@ export default function App() {
 
         {/* Inner Content Wrap */}
         <div id="content-inner-scroll" className="p-4 md:p-8 flex-1 overflow-y-auto space-y-6">
-          {/* Global Offline Banner */}
-          <AnimatePresence>
-            {isOffline && (
-              <motion.div
-                id="global-offline-banner"
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="mb-4 p-4 bg-red-950/80 border border-red-500/30 rounded-2xl flex items-start gap-3.5 shadow-lg relative z-10"
-              >
-                <div className="shrink-0 w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-                  </svg>
-                </div>
-                <div>
-                  <h4 className="font-display font-black text-sm text-white flex items-center gap-2">
-                    Koneksi Terputus
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                  </h4>
-                  <p className="text-slate-400 text-xs font-bold mt-1 uppercase tracking-wider">
-                    Tidak dapat terhubung ke server. Periksa koneksi internet Anda.
-                  </p>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {isLoadingData ? (
-            <div id="loading-state-container" className="flex flex-col items-center justify-center py-20 space-y-6">
-              {/* Spinner */}
-              <div className="relative w-16 h-16">
-                <div className="absolute inset-0 rounded-full border-4 border-gold-500/10" />
-                <div className="absolute inset-0 rounded-full border-4 border-t-gold-400 animate-spin" />
-              </div>
-              <div className="text-center space-y-2">
-                <h3 className="font-display font-black text-lg text-white">Menghubungkan ke server...</h3>
-                <p className="text-slate-400 text-sm max-w-sm">Mohon tunggu sebentar, sistem sedang sinkronisasi data secara real-time.</p>
-              </div>
-
-              {/* Skeleton cards */}
-              <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="bg-dark-900 border border-gold-500/10 p-6 rounded-2xl space-y-4 animate-pulse">
-                    <div className="h-4 bg-slate-800 rounded w-1/3" />
-                    <div className="h-8 bg-slate-800 rounded w-1/2" />
-                    <div className="h-3 bg-slate-800 rounded w-3/4" />
-                  </div>
-                ))}
-              </div>
+            <div id="loading-state-container" className="flex flex-col items-center justify-center py-20 space-y-4">
+              <div className="w-8 h-8 rounded-full border-2 border-gold-500/10 border-t-gold-400 animate-spin" />
+              <p className="text-slate-400 text-sm font-medium">Menghubungkan ke database...</p>
             </div>
           ) : (
 
@@ -529,14 +516,24 @@ export default function App() {
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-dark-900 border border-gold-500/20 rounded-2xl shadow-2xl p-4 flex items-start gap-3.5"
+            className={`fixed bottom-6 right-6 z-50 max-w-sm w-full bg-dark-900 border ${
+              toast.type === "error" ? "border-red-500/30" : "border-gold-500/20"
+            } rounded-2xl shadow-2xl p-4 flex items-start gap-3.5`}
           >
-            {/* Green Check Icon */}
-            <div className="shrink-0 w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-              </svg>
-            </div>
+            {/* Icon */}
+            {toast.type === "error" ? (
+              <div className="shrink-0 w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                </svg>
+              </div>
+            ) : (
+              <div className="shrink-0 w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                </svg>
+              </div>
+            )}
 
             {/* Title & Message */}
             <div className="flex-1">

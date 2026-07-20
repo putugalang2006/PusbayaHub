@@ -58,7 +58,7 @@ export async function checkDatabaseConnection(): Promise<boolean> {
   try {
     const supabase = await getSupabaseClient();
     const { error } = await supabase
-      .from("anggota")
+      .from("Anggota")
       .select("id")
       .limit(1);
 

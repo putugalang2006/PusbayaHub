@@ -215,24 +215,6 @@ export default function DashboardStats({ anggotaList, onNavigateToMembers, onAdd
 
         {/* Notification Area */}
         <AnimatePresence>
-          {isOffline && (
-            <motion.div
-              initial={{ opacity: 0, height: 0, y: -10 }}
-              animate={{ opacity: 1, height: "auto", y: 0 }}
-              exit={{ opacity: 0, height: 0, y: -10 }}
-              className="mb-6 p-4 rounded-xl flex items-start gap-3 border border-red-500/30 bg-red-950/40 text-red-300 relative z-10 overflow-hidden"
-            >
-              <div className="shrink-0 mt-0.5">
-                <div className="w-5 h-5 rounded-full border border-red-500 flex items-center justify-center text-xs font-black text-red-400 bg-red-950/50">!</div>
-              </div>
-              <div>
-                <h5 className="font-black text-sm text-red-400">
-                  Koneksi Terputus
-                </h5>
-                <p className="text-xs mt-0.5 font-bold leading-relaxed">Tidak dapat terhubung ke server. Periksa koneksi internet Anda.</p>
-              </div>
-            </motion.div>
-          )}
           {notification && (
             <motion.div
               initial={{ opacity: 0, height: 0, y: -10 }}
