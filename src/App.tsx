@@ -16,8 +16,6 @@ import DaftarPengguna from "./components/DaftarPengguna";
 import FormAnggota from "./components/FormAnggota";
 import RekapData from "./components/RekapData";
 import { onSnapshotAnggota, saveAnggota, deleteAnggota, checkDatabaseConnection } from "./lib/db";
-import { db, isFirebaseConfigured } from "./firebase";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
 
 export default function App() {
   // Session State
@@ -50,7 +48,34 @@ export default function App() {
   // Connection and Loading State Handler
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "online" | "offline">("connecting");
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const isOffline = connectionStatus === "offline";
+
+  // Manual Refresh Handler
+  const handleRefreshData = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await fetch("/api/anggota");
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          setAnggotaList(data);
+          showToastNotification("Berhasil", "Data anggota berhasil disinkronkan dari Google Sheets.");
+          setConnectionStatus("online");
+        } else {
+          throw new Error("No data returned");
+        }
+      } else {
+        throw new Error("Failed to fetch");
+      }
+    } catch (e) {
+      console.warn("Refresh failed", e);
+      showToastNotification("Gagal", "Tidak dapat terhubung ke database. Silakan coba beberapa saat lagi.");
+      setConnectionStatus("offline");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Active Connection Probe with Auto-Retry and Sync recovery
   useEffect(() => {
@@ -59,27 +84,15 @@ export default function App() {
 
     const fetchLatestData = async () => {
       try {
-        if (isFirebaseConfigured && db) {
-          const q = query(collection(db, "anggota"), orderBy("createdAt", "desc"));
-          const snapshot = await getDocs(q);
-          const list: Anggota[] = [];
-          snapshot.forEach((d) => {
-            list.push({ id: d.id, ...d.data() } as Anggota);
-          });
-          if (list.length > 0) {
-            setAnggotaList(list);
-          }
-        } else {
-          const res = await fetch("/api/anggota");
-          if (res.ok) {
-            const data = await res.json();
-            if (data) {
-              setAnggotaList(data);
-            }
+        const res = await fetch("/api/anggota");
+        if (res.ok) {
+          const data = await res.json();
+          if (data) {
+            setAnggotaList(data);
           }
         }
       } catch (err) {
-        console.error("Failed to fetch during recovery:", err);
+        console.warn("Failed to fetch during recovery:", err);
       }
     };
 
@@ -193,7 +206,10 @@ export default function App() {
     }
 
     try {
-      await saveAnggota(data);
+      await saveAnggota({
+        ...data,
+        dibuatOleh: userSession?.nama || "Admin"
+      });
       showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
       setIsFormOpen(false);
       setEditingAnggota(null);
@@ -245,7 +261,10 @@ export default function App() {
   // Dashboard Direct Addition Handler
   const handleAddAnggotaFromDashboard = async (data: Omit<Anggota, "id" | "createdAt">) => {
     try {
-      await saveAnggota(data);
+      await saveAnggota({
+        ...data,
+        dibuatOleh: userSession?.nama || "Admin"
+      });
       showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
       
       // Redirect to Daftar Anggota tab after 1.5 seconds
@@ -284,6 +303,8 @@ export default function App() {
         userRole={userSession.role}
         onLogout={handleLogout}
         connectionStatus={connectionStatus}
+        onRefresh={handleRefreshData}
+        isRefreshing={isRefreshing}
       />
 
       {/* Main Content Area */}
@@ -325,6 +346,26 @@ export default function App() {
                 </>
               )}
             </div>
+
+            {/* Premium Refresh Data Button */}
+            <button
+              id="desktop-refresh-button"
+              onClick={handleRefreshData}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-dark-900 border border-gold-500/10 hover:border-gold-500/30 text-xs font-bold text-slate-300 hover:text-gold-400 transition-all cursor-pointer disabled:opacity-50 shadow-md group"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2.5}
+                stroke="currentColor"
+                className={`w-4 h-4 text-gold-400 group-hover:rotate-180 transition-transform duration-500 ${isRefreshing ? "animate-spin" : ""}`}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+              <span>{isRefreshing ? "Memperbarui..." : "Refresh Data"}</span>
+            </button>
 
             {/* Clock Widget */}
             <div id="header-clock-widget" className="flex items-center gap-3 bg-dark-900 border border-gold-500/10 px-4 py-2 rounded-xl text-slate-300 shadow-md">
