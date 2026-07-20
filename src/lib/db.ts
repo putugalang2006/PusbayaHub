@@ -3,15 +3,51 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { Anggota } from "../types";
 
-export enum OperationType {
-  CREATE = "create",
-  UPDATE = "update",
-  DELETE = "delete",
-  LIST = "list",
-  GET = "get",
-  WRITE = "write",
+let supabaseInstance: SupabaseClient | null = null;
+let supabasePromise: Promise<SupabaseClient | null> | null = null;
+
+/**
+ * Lazily fetches configuration from Express backend and initializes Supabase client.
+ */
+export async function getSupabaseClient(): Promise<SupabaseClient> {
+  if (supabaseInstance) return supabaseInstance;
+
+  if (!supabasePromise) {
+    supabasePromise = (async () => {
+      try {
+        const response = await fetch("/api/config");
+        if (!response.ok) {
+          throw new Error("Gagal mengambil konfigurasi database dari server");
+        }
+        const config = await response.json();
+        
+        const url = config.supabaseUrl;
+        const key = config.supabaseAnonKey;
+
+        if (!url || !key) {
+          console.warn("Konfigurasi Supabase (SUPABASE_URL / SUPABASE_ANON_KEY) tidak ditemukan di server.");
+          return null;
+        }
+
+        supabaseInstance = createClient(url, key);
+        return supabaseInstance;
+      } catch (err) {
+        console.error("Gagal inisialisasi Supabase client:", err);
+        return null;
+      }
+    })();
+  }
+
+  const client = await supabasePromise;
+  if (!client) {
+    throw new Error(
+      "Supabase belum dikonfigurasi. Silakan tambahkan environment variable SUPABASE_URL dan SUPABASE_ANON_KEY di menu Secrets."
+    );
+  }
+  return client;
 }
 
 /**
@@ -20,109 +56,188 @@ export enum OperationType {
  */
 export async function checkDatabaseConnection(): Promise<boolean> {
   try {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch("/api/anggota", { signal: controller.signal });
-    clearTimeout(id);
-    return res.ok;
+    const supabase = await getSupabaseClient();
+    const { error } = await supabase
+      .from("anggota")
+      .select("id")
+      .limit(1);
+
+    if (error) {
+      console.warn("Supabase query test failed:", error.message);
+      return false;
+    }
+    return true;
   } catch (error) {
-    console.warn("Express API connection check failed:", error);
+    console.warn("Express / Supabase connection check failed:", error);
     return false;
   }
 }
 
-function setupSseFallback(
-  callback: (data: Anggota[]) => void,
-  onError: (err: any) => void
-): () => void {
-  console.log("Listening to real-time updates from Express SSE fallback...");
-  
-  // Connect to Server Sent Events for instant real-time pushes
-  const eventSource = new EventSource("/api/events");
-  
-  eventSource.onmessage = (event) => {
-    if (event.data === "ping") return;
-    try {
-      const data = JSON.parse(event.data);
-      callback(data);
-    } catch (e) {
-      console.warn("Failed to parse SSE event data", e);
-    }
-  };
+/**
+ * Fetch all members from Supabase table 'anggota'.
+ */
+export async function getAnggotaList(): Promise<Anggota[]> {
+  const supabase = await getSupabaseClient();
+  const { data, error } = await supabase
+    .from("anggota")
+    .select("*")
+    .order("created_at", { ascending: false });
 
-  eventSource.onerror = (err) => {
-    // EventSource naturally auto-reconnects on connection drops.
-    console.warn("Sinyal koneksi SSE terputus, mencoba menghubungkan kembali secara otomatis...");
-    onError(err);
-  };
+  if (error) {
+    throw new Error(`Gagal mengambil data anggota: ${error.message}`);
+  }
 
-  return () => {
-    eventSource.close();
-  };
+  if (!data) return [];
+
+  // Map backend columns back to frontend types
+  return data.map((item: any) => ({
+    id: item.id,
+    nama: item.nama,
+    whatsapp: item.whatsapp,
+    alamatLengkap: item.alamat || "",
+    tempekan: item.tempekan,
+    createdAt: item.created_at,
+    dibuatOleh: item.dibuat_oleh,
+    updatedAt: item.updated_at,
+  })) as Anggota[];
 }
 
 /**
  * Listen to real-time updates for Anggota List.
- * Automatically selects Google Sheets real-time SSE Express proxy.
+ * Employs Supabase Realtime subscription.
  */
 export function onSnapshotAnggota(
   callback: (data: Anggota[]) => void,
   onError: (err: any) => void
 ): () => void {
   let isCancelled = false;
-  let unsubscribeFn: (() => void) | null = null;
+  let channel: any = null;
 
-  if (isCancelled) return () => {};
+  const setupSubscription = async () => {
+    try {
+      // 1. Send initial data fetch
+      const initialData = await getAnggotaList();
+      if (isCancelled) return;
+      callback(initialData);
 
-  unsubscribeFn = setupSseFallback(callback, onError);
+      // 2. Setup real-time postgres changes subscription
+      const supabase = await getSupabaseClient();
+      if (isCancelled) return;
+
+      channel = supabase
+        .channel("public:anggota")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "anggota",
+          },
+          async (payload: any) => {
+            console.log("Realtime event received from Supabase:", payload);
+            if (isCancelled) return;
+            try {
+              const latestData = await getAnggotaList();
+              if (!isCancelled) {
+                callback(latestData);
+              }
+            } catch (err) {
+              console.warn("Gagal memperbarui data real-time:", err);
+            }
+          }
+        )
+        .subscribe((status: string) => {
+          if (status === "CHANNEL_ERROR") {
+            console.warn("Saluran Realtime Supabase mengalami error. Pastikan tabel 'anggota' telah mengaktifkan Realtime Replication di dashboard Supabase.");
+          }
+        });
+    } catch (err: any) {
+      console.warn("Gagal inisialisasi langganan real-time:", err.message || err);
+      onError(err);
+    }
+  };
+
+  setupSubscription();
 
   return () => {
     isCancelled = true;
-    if (unsubscribeFn) {
-      unsubscribeFn();
+    if (channel) {
+      channel.unsubscribe();
     }
   };
 }
 
 /**
  * Add or Edit a member record.
- * Handles writing to Google Sheets via Express proxy.
+ * Handles saving to Supabase 'anggota' table.
  */
 export async function saveAnggota(
   data: Omit<Anggota, "id" | "createdAt"> & { id?: string; createdAt?: string; dibuatOleh?: string }
 ): Promise<void> {
-  const method = data.id ? "PUT" : "POST";
-  const url = data.id ? `/api/anggota/${data.id}` : "/api/anggota";
-  
-  const response = await fetch(url, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      id: data.id,
-      nama: data.nama,
-      whatsapp: data.whatsapp,
-      alamatLengkap: data.alamatLengkap,
-      tempekan: data.tempekan,
-      dibuatOleh: data.dibuatOleh || "Admin",
-      createdAt: data.createdAt,
-    }),
-  });
+  const supabase = await getSupabaseClient();
 
-  if (!response.ok) {
-    throw new Error(`Failed to save anggota via REST API: ${response.statusText}`);
+  // Validate inputs
+  if (!data.nama || !data.nama.trim()) {
+    throw new Error("Nama Lengkap wajib diisi.");
+  }
+  if (!data.whatsapp || !data.whatsapp.trim()) {
+    throw new Error("Nomor WhatsApp wajib diisi.");
+  }
+  if (!data.alamatLengkap || !data.alamatLengkap.trim()) {
+    throw new Error("Alamat Lengkap wajib diisi.");
+  }
+  if (!data.tempekan) {
+    throw new Error("Tempekan wajib dipilih.");
+  }
+
+  // Map frontend properties to backend snake_case table columns
+  const record = {
+    nama: data.nama.trim(),
+    whatsapp: data.whatsapp.trim(),
+    alamat: data.alamatLengkap.trim(),
+    tempekan: data.tempekan,
+    dibuat_oleh: data.dibuatOleh || "Admin",
+    updated_at: new Date().toISOString(),
+  };
+
+  if (data.id) {
+    // Update existing member record
+    const { error } = await supabase
+      .from("anggota")
+      .update(record)
+      .eq("id", data.id);
+
+    if (error) {
+      throw new Error(`Gagal memperbarui data anggota: ${error.message}`);
+    }
+  } else {
+    // Insert new member record (let Supabase generate UUID automatically if no ID is passed)
+    const newRecord = {
+      ...record,
+      created_at: data.createdAt || new Date().toISOString(),
+    };
+    const { error } = await supabase
+      .from("anggota")
+      .insert([newRecord]);
+
+    if (error) {
+      throw new Error(`Gagal menyimpan data anggota baru: ${error.message}`);
+    }
   }
 }
 
 /**
  * Delete a member record.
- * Handles deleting from Google Sheets via Express proxy.
+ * Handles deleting from Supabase 'anggota' table.
  */
 export async function deleteAnggota(id: string): Promise<void> {
-  const response = await fetch(`/api/anggota/${id}`, {
-    method: "DELETE",
-  });
+  const supabase = await getSupabaseClient();
+  const { error } = await supabase
+    .from("anggota")
+    .delete()
+    .eq("id", id);
 
-  if (!response.ok) {
-    throw new Error(`Failed to delete anggota via REST API: ${response.statusText}`);
+  if (error) {
+    throw new Error(`Gagal menghapus data anggota: ${error.message}`);
   }
 }

@@ -15,7 +15,7 @@ import DashboardStats from "./components/DashboardStats";
 import DaftarPengguna from "./components/DaftarPengguna";
 import FormAnggota from "./components/FormAnggota";
 import RekapData from "./components/RekapData";
-import { onSnapshotAnggota, saveAnggota, deleteAnggota, checkDatabaseConnection } from "./lib/db";
+import { onSnapshotAnggota, saveAnggota, deleteAnggota, checkDatabaseConnection, getAnggotaList } from "./lib/db";
 
 export default function App() {
   // Session State
@@ -55,18 +55,13 @@ export default function App() {
   const handleRefreshData = async () => {
     setIsRefreshing(true);
     try {
-      const res = await fetch("/api/anggota");
-      if (res.ok) {
-        const data = await res.json();
-        if (data) {
-          setAnggotaList(data);
-          showToastNotification("Berhasil", "Data anggota berhasil disinkronkan dari Google Sheets.");
-          setConnectionStatus("online");
-        } else {
-          throw new Error("No data returned");
-        }
+      const data = await getAnggotaList();
+      if (data) {
+        setAnggotaList(data);
+        showToastNotification("Berhasil", "Data anggota berhasil disinkronkan dari Supabase.");
+        setConnectionStatus("online");
       } else {
-        throw new Error("Failed to fetch");
+        throw new Error("No data returned");
       }
     } catch (e) {
       console.warn("Refresh failed", e);
@@ -84,12 +79,9 @@ export default function App() {
 
     const fetchLatestData = async () => {
       try {
-        const res = await fetch("/api/anggota");
-        if (res.ok) {
-          const data = await res.json();
-          if (data) {
-            setAnggotaList(data);
-          }
+        const data = await getAnggotaList();
+        if (data) {
+          setAnggotaList(data);
         }
       } catch (err) {
         console.warn("Failed to fetch during recovery:", err);
@@ -210,18 +202,17 @@ export default function App() {
         ...data,
         dibuatOleh: userSession?.nama || "Admin"
       });
-      showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
+      showToastNotification("Berhasil", "Data berhasil disimpan");
       setIsFormOpen(false);
       setEditingAnggota(null);
-      if (!data.id) {
-        // Redirect to Daftar Anggota tab after 1.5 seconds
-        setTimeout(() => {
-          setActiveTab("anggota");
-        }, 1500);
-      }
-    } catch (e) {
+      
+      // Redirect to Daftar Anggota tab after 1.5 seconds
+      setTimeout(() => {
+        setActiveTab("anggota");
+      }, 1500);
+    } catch (e: any) {
       console.error(e);
-      showToastNotification("Gagal", "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.");
+      showToastNotification("Gagal", e.message || "Gagal menyimpan data.");
       setConnectionStatus("offline");
     }
   };
@@ -265,15 +256,15 @@ export default function App() {
         ...data,
         dibuatOleh: userSession?.nama || "Admin"
       });
-      showToastNotification("Berhasil", "Data anggota berhasil disimpan.");
+      showToastNotification("Berhasil", "Data berhasil disimpan");
       
       // Redirect to Daftar Anggota tab after 1.5 seconds
       setTimeout(() => {
         setActiveTab("anggota");
       }, 1500);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      showToastNotification("Gagal", "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.");
+      showToastNotification("Gagal", e.message || "Gagal menyimpan data.");
       setConnectionStatus("offline");
     }
   };
