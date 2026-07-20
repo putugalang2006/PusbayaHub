@@ -74,17 +74,17 @@ export async function checkDatabaseConnection(): Promise<boolean> {
 }
 
 /**
- * Fetch all members from Supabase table 'anggota'.
+ * Fetch all members from Supabase table 'Anggota'.
  */
 export async function getAnggotaList(): Promise<Anggota[]> {
   const supabase = await getSupabaseClient();
   const { data, error } = await supabase
-    .from("anggota")
+    .from("Anggota")
     .select("*")
     .order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Gagal mengambil data anggota: ${error.message}`);
+    throw new Error(`Gagal mengambil data Anggota: ${error.message}`);
   }
 
   if (!data) return [];
@@ -125,13 +125,13 @@ export function onSnapshotAnggota(
       if (isCancelled) return;
 
       channel = supabase
-        .channel("public:anggota")
+        .channel("public:Anggota")
         .on(
           "postgres_changes",
           {
             event: "*",
             schema: "public",
-            table: "anggota",
+            table: "Anggota",
           },
           async (payload: any) => {
             console.log("Realtime event received from Supabase:", payload);
@@ -203,7 +203,7 @@ export async function saveAnggota(
   if (data.id) {
     // Update existing member record
     const { error } = await supabase
-      .from("anggota")
+      .from("Anggota")
       .update(record)
       .eq("id", data.id);
 
@@ -217,7 +217,7 @@ export async function saveAnggota(
       created_at: data.createdAt || new Date().toISOString(),
     };
     const { error } = await supabase
-      .from("anggota")
+      .from("Anggota")
       .insert([newRecord]);
 
     if (error) {
@@ -233,7 +233,7 @@ export async function saveAnggota(
 export async function deleteAnggota(id: string): Promise<void> {
   const supabase = await getSupabaseClient();
   const { error } = await supabase
-    .from("anggota")
+    .from("Anggota")
     .delete()
     .eq("id", id);
 
